@@ -72,10 +72,7 @@ struct LimitsPane: View {
 
     @ViewBuilder
     private var codexCard: some View {
-        let subtitle = [limits.codex?.plan.map { "ChatGPT \($0.capitalized)" }, limits.codex?.asOf.map { "данные " + Self.ago($0) }]
-            .compactMap { $0 }
-            .joined(separator: " · ")
-        card(title: "Codex", subtitle: subtitle.isEmpty ? "лимиты ChatGPT для Codex" : subtitle, trailing: EmptyView()) {
+        card(title: "Codex", subtitle: codexSubtitle, trailing: EmptyView()) {
             if let codex = limits.codex {
                 windows(codex.windows)
             } else {
@@ -84,6 +81,13 @@ struct LimitsPane: View {
                     .foregroundStyle(Theme.secondary)
             }
         }
+    }
+
+    private var codexSubtitle: String {
+        var parts: [String] = []
+        if let plan = limits.codex?.plan, !plan.isEmpty { parts.append("ChatGPT " + plan.capitalized) }
+        if let asOf = limits.codex?.asOf { parts.append("данные " + Self.ago(asOf)) }
+        return parts.isEmpty ? "лимиты ChatGPT для Codex" : parts.joined(separator: " · ")
     }
 
     // MARK: - Pieces

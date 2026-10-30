@@ -430,7 +430,7 @@ enum AgentScanner {
         guard let files = try? fm.contentsOfDirectory(
             at: AgentLogs.customFolder, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]
         ) else { return [] }
-        return files.compactMap { url in
+        return files.compactMap { (url: URL) -> AgentSession? in
             guard url.pathExtension == "json",
                   let modified = AgentLogs.modified(url), modified >= since,
                   let data = try? Data(contentsOf: url),

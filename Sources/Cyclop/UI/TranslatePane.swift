@@ -126,7 +126,7 @@ struct TranslatePane: View {
     // MARK: - Right
 
     private func result(_ font: CGFloat) -> some View {
-        column(translator.targetTitle, onTitleTap: { mode = .pickLanguage }) {
+        column(translator.targetTitle, pickable: true) {
             if let engine = translator.engine, !translator.output.isEmpty {
                 Text(verbatim: engine.rawValue)
                     .font(.system(size: 8.5, weight: .semibold))
@@ -217,14 +217,14 @@ struct TranslatePane: View {
 
     private func column<Accessory: View, Content: View>(
         _ title: String,
-        onTitleTap: (() -> Void)? = nil,
+        pickable: Bool = false,
         @ViewBuilder accessory: () -> Accessory,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                if let onTitleTap {
-                    Button(action: onTitleTap) {
+                if pickable {
+                    Button { mode = .pickLanguage } label: {
                         HStack(spacing: 3) {
                             Text(verbatim: title.uppercased())
                                 .font(.system(size: 9, weight: .semibold))
