@@ -1,0 +1,43 @@
+==> swift build -c release
+Building for production...
+[0/4] Write sources
+[1/4] Write swift-version--79AA4F9932D1E87A.txt
+[3/5] Compiling Cyclop AppDelegate.swift
+/Users/runner/work/cyclop/cyclop/Sources/Cyclop/Services/ShelfStore.swift:137:86: warning: capture of 'item' with non-sendable type 'ShelfItem' in a '@Sendable' closure
+  8 | }
+  9 | 
+ 10 | struct ShelfItem: Identifiable, Equatable {
+    |        `- note: consider making struct 'ShelfItem' conform to the 'Sendable' protocol
+ 11 |     let id = UUID()
+ 12 |     let url: URL
+    :
+135 |             let size = rep.nsImage.size
+136 |             Task { @MainActor in
+137 |                 guard let self, let index = self.items.firstIndex(where: { $0.url == item.url }) else { return }
+    |                                                                                      `- warning: capture of 'item' with non-sendable type 'ShelfItem' in a '@Sendable' closure
+138 |                 self.items[index].icon = NSImage(cgImage: bitmap, size: size)
+139 |             }
+[3/5] Write Objects.LinkFileList
+[4/5] Linking Cyclop
+Build complete! (32.85s)
+==> assembling /Users/runner/work/cyclop/cyclop/build/Cyclop.app
+==> локализации
+    en.lproj
+    ru.lproj
+==> building Now Playing helper
+==> ad-hoc signing
+/Users/runner/work/cyclop/cyclop/build/Cyclop.app/Contents/Resources/libcyclopmedia.dylib: replacing existing signature
+/Users/runner/work/cyclop/cyclop/build/Cyclop.app: replacing existing signature
+==> done: /Users/runner/work/cyclop/cyclop/build/Cyclop.app
+==> раскладка образа
+==> сборка /Users/runner/work/cyclop/cyclop/build/Cyclop-0.8.3.dmg
+==> готово: /Users/runner/work/cyclop/cyclop/build/Cyclop-0.8.3.dmg (1.3M)
+==> версия внутри совпадает: 0.8.3
+
+    Внимание: сборка подписана ad-hoc, без Developer ID, и не нотаризована.
+    На твоей машине она запускается, на любой другой Gatekeeper ее не пустит.
+    Тому, кому отдаешь образ, придется один раз зайти в Системные настройки →
+    Конфиденциальность и безопасность → "Все равно открыть". В macOS 15
+    открытие через Control-клик для такого случая больше не работает.
+
+    Чтобы этого не требовалось, нужен Apple Developer ID и нотаризация.
