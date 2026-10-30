@@ -1,0 +1,71 @@
+name: custom-build
+
+# Своя сборка: на каждый пуш в main собирается .dmg и выкладывается в релиз
+# `custom` — одна постоянная ссылка на свежую версию. Лог сборки уходит в ветку
+# `ci-log`, чтобы его можно было прочитать без входа в GitHub.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: custom-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Сборка .app и .dmg
+        id: build
+        run: |
+          set -o pipefail
+          ./Scripts/dmg.sh 2>&1 | tee build.log
+
+      - name: Приложение переживает запуск
+        id: launch
+        run: |
+          build/Cyclop.app/Contents/MacOS/Cyclop > launch.log 2>&1 &
+          PID=$!
+          sleep 12
+          if kill -0 "$PID" 2>/dev/null; then
+            kill "$PID"; echo "ok: прожило 12 секунд" | tee -a launch.log
+          else
+            echo "::error::Cyclop упал при запуске" | tee -a launch.log
+            for f in "$HOME/Library/Logs/DiagnosticReports"/Cyclop*.ips; do
+              [ -e "$f" ] && head -c 6000 "$f" >> launch.log
+            done
+            exit 1
+          fi
+
+      - name: Релиз custom
+        run: |
+          DMG="$(ls build/Cyclop-*.dmg | head -1)"
+          cp "$DMG" build/Cyclop-custom.dmg
+          gh release delete custom --yes --cleanup-tag || true
+          gh release create custom build/Cyclop-custom.dmg \
+            --title "Cyclop (своя сборка)" \
+            --notes "Сборка из ${GITHUB_SHA::7}. Агенты, лимиты, DeepL." \
+            --target "$GITHUB_SHA"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Лог в ветку ci-log
+        if: always()
+        run: |
+          mkdir -p /tmp/log && cd /tmp/log
+          git init -q && git checkout -q -b ci-log
+          cp "$GITHUB_WORKSPACE/build.log" . 2>/dev/null || echo "нет build.log" > build.log
+          cp "$GITHUB_WORKSPACE/launch.log" . 2>/dev/null || true
+          echo "${GITHUB_SHA} build=${{ steps.build.outcome }} launch=${{ steps.launch.outcome }}" > status.txt
+          git -c user.name=ci -c user.email=ci@localhost add -A
+          git -c user.name=ci -c user.email=ci@localhost commit -qm "log ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-log
+        env:
+          GH_TOKEN: ${{ github.token }}

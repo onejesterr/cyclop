@@ -13,6 +13,12 @@ struct TranslatePane: View {
     @Binding var wantsKeyboard: Bool
 
     @FocusState private var focused: Bool
+    @FocusState private var keyFocused: Bool
+    /// What the pane shows instead of the two columns, if anything.
+    @State private var mode: Mode = .translate
+    @State private var keyDraft = ""
+
+    private enum Mode { case translate, pickLanguage, key }
     @State private var configuration: TranslationSession.Configuration?
     /// Measured once, off the layout path. See `body`.
     @State private var paneSize: CGSize = .zero
@@ -23,10 +29,18 @@ struct TranslatePane: View {
 
     var body: some View {
         let font = fontSize(in: paneSize)
-        HStack(alignment: .top, spacing: 10) {
-            source(font)
-            result(font)
+        ZStack {
+            HStack(alignment: .top, spacing: 10) {
+                source(font)
+                result(font)
+            }
+            .opacity(mode == .translate ? 1 : 0)
+            .allowsHitTesting(mode == .translate)
+
+            if mode == .pickLanguage { languagePicker }
+            if mode == .key { keyEntry }
         }
+        .animation(Theme.contentAnimation, value: mode)
         // Measured from a background layer rather than by wrapping the content
         // in a GeometryReader. Wrapped, the type size depends on a measurement
         // that depends on the very text being sized, so every wrap onto a new
@@ -48,13 +62,23 @@ struct TranslatePane: View {
             await translator.run(session)
         }
         .onAppear { focused = wantsKeyboard }
-        .onChange(of: wantsKeyboard) { _, wants in focused = wants }
+        .onChange(of: wantsKeyboard) { _, wants in
+            if mode == .key { keyFocused = wants } else { focused = wants }
+        }
     }
 
     // MARK: - Left
 
     private func source(_ font: CGFloat) -> some View {
-        column(Translator.name(translator.route.source)) {
+        column(translator.sourceTitle) {
+            Button { openKeyEntry() } label: {
+                Image(systemName: translator.hasDeepLKey ? "key.fill" : "key")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(translator.hasDeepLKey ? Theme.secondary : Theme.tertiary)
+            }
+            .buttonStyle(.plain)
+            .pointerStyle(.default)
+            .help(translator.hasDeepLKey ? "Ключ DeepL" : "Подключить DeepL")
             if !translator.input.isEmpty {
                 Button { translator.reset() } label: {
                     Image(systemName: "xmark")
@@ -102,7 +126,13 @@ struct TranslatePane: View {
     // MARK: - Right
 
     private func result(_ font: CGFloat) -> some View {
-        column(Translator.name(translator.route.target)) {
+        column(translator.targetTitle, onTitleTap: { mode = .pickLanguage }) {
+            if let engine = translator.engine, !translator.output.isEmpty {
+                Text(verbatim: engine.rawValue)
+                    .font(.system(size: 8.5, weight: .semibold))
+                    .foregroundStyle(engine == .deepL ? Theme.secondary : Theme.tertiary)
+                    .help(translator.notice ?? "")
+            }
             if !translator.output.isEmpty {
                 CopyButton { translator.copyOutput() }
             }
@@ -187,15 +217,35 @@ struct TranslatePane: View {
 
     private func column<Accessory: View, Content: View>(
         _ title: String,
+        onTitleTap: (() -> Void)? = nil,
         @ViewBuilder accessory: () -> Accessory,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text(title.uppercased())
-                    .font(.system(size: 9, weight: .semibold))
-                    .tracking(0.8)
-                    .foregroundStyle(Theme.tertiary)
+                if let onTitleTap {
+                    Button(action: onTitleTap) {
+                        HStack(spacing: 3) {
+                            Text(verbatim: title.uppercased())
+                                .font(.system(size: 9, weight: .semibold))
+                                .tracking(0.8)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 7, weight: .bold))
+                        }
+                        .foregroundStyle(Theme.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Theme.surface))
+                    }
+                    .buttonStyle(.plain)
+                    .pointerStyle(.default)
+                    .padding(.leading, -6)
+                } else {
+                    Text(verbatim: title.uppercased())
+                        .font(.system(size: 9, weight: .semibold))
+                        .tracking(0.8)
+                        .foregroundStyle(Theme.tertiary)
+                }
                 Spacer(minLength: 4)
                 accessory()
             }
@@ -204,6 +254,142 @@ struct TranslatePane: View {
             content()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    // MARK: - Language picker
+
+    private var languagePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(verbatim: "ПЕРЕВОДИТЬ НА")
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(Theme.tertiary)
+                Spacer()
+                closeButton
+            }
+            ScrollView(showsIndicators: false) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 6)], spacing: 6) {
+                    chip("Авто: RU ↔ EN", selected: translator.target == "auto") { pick("auto") }
+                    ForEach(Translator.languages) { language in
+                        chip(language.name, selected: translator.target == language.id) { pick(language.id) }
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.black))
+    }
+
+    private func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(verbatim: title)
+                .font(.system(size: 11, weight: selected ? .semibold : .regular))
+                .foregroundStyle(selected ? Color.black : .white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(selected ? Color.white : Theme.surface)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.default)
+    }
+
+    private func pick(_ id: String) {
+        translator.target = id
+        mode = .translate
+        focused = wantsKeyboard
+    }
+
+    private var closeButton: some View {
+        Button {
+            mode = .translate
+            focused = wantsKeyboard
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Theme.secondary)
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.default)
+    }
+
+    // MARK: - DeepL key
+
+    private func openKeyEntry() {
+        keyDraft = ""
+        mode = .key
+        keyFocused = wantsKeyboard
+    }
+
+    private var keyEntry: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(verbatim: translator.hasDeepLKey ? "DEEPL ПОДКЛЮЧЁН" : "КЛЮЧ DEEPL API")
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(Theme.tertiary)
+                Spacer()
+                closeButton
+            }
+            Text(verbatim: translator.hasDeepLKey
+                 ? "Переводит DeepL. Если он недоступен или кончился лимит — переведёт Apple. Можно вставить другой ключ:"
+                 : "Бесплатный тариф DeepL API Free — 500 000 символов в месяц. Скопируй ключ из аккаунта DeepL и вставь сюда (⌘V):")
+                .font(.system(size: 10.5))
+                .foregroundStyle(Theme.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            SecureField(text: $keyDraft, prompt: Text(verbatim: "xxxxxxxx-xxxx-…:fx")) { EmptyView() }
+                .textFieldStyle(.plain)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.white)
+                .tint(Theme.secondary)
+                .focused($keyFocused)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.surface))
+                .onSubmit { saveKey() }
+            HStack(spacing: 8) {
+                keyButton("Сохранить", prominent: true) { saveKey() }
+                    .disabled(keyDraft.trimmingCharacters(in: .whitespaces).isEmpty)
+                if translator.hasDeepLKey {
+                    keyButton("Отключить DeepL") {
+                        translator.removeDeepLKey()
+                        mode = .translate
+                    }
+                }
+                Spacer()
+                keyButton("Получить ключ") { Translator.openDeepLSignup() }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.black))
+    }
+
+    private func keyButton(_ title: String, prominent: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(verbatim: title)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(prominent ? Color.black : .white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(prominent ? Color.white : Theme.surfaceHover))
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.default)
+    }
+
+    private func saveKey() {
+        let key = keyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        translator.saveDeepLKey(key)
+        keyDraft = ""
+        mode = .translate
+        focused = wantsKeyboard
     }
 
     // MARK: - Scheduling
@@ -220,7 +406,10 @@ struct TranslatePane: View {
         try? await Task.sleep(for: .milliseconds(320))
         guard !Task.isCancelled else { return }
 
-        let route = Translator.route(for: text)
+        if translator.hasDeepLKey, await translator.runDeepL() { return }
+        guard !Task.isCancelled else { return }
+
+        let route = translator.route(for: text)
         if var current = configuration, current.source == route.source, current.target == route.target {
             // Same pair, different text. The modifier only re-runs when the
             // configuration changes, and invalidating is how one says "again".

@@ -101,14 +101,14 @@ struct NotchContentView: View {
     @ViewBuilder
     private var trailing: some View {
         switch vm.tab {
-        case .media:
-            HStack(spacing: 6) {
-                if vm.media.track != nil {
-                    EqualizerBars(isAnimating: vm.media.isPlaying)
+        case .agents:
+            if vm.agents.workingCount > 0 {
+                HStack(spacing: 6) {
+                    EqualizerBars(isAnimating: true)
+                    Text(verbatim: "работают: \(vm.agents.workingCount)")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Theme.tertiary)
                 }
-                Text(vm.media.sourceName ?? "")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Theme.tertiary)
             }
         case .shelf:
             counter(vm.shelf.items.count)
@@ -116,11 +116,11 @@ struct NotchContentView: View {
             counter(vm.clipboard.items.count)
         case .snippets:
             counter(vm.snippets.items.count)
-        case .calendar:
-            if let next = vm.calendar.next {
-                Text(CalendarPane.countdown(to: next, from: vm.calendar.now))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(next.isRunning ? Color.white.opacity(0.8) : Theme.tertiary)
+        case .limits:
+            if let headline = vm.limits.headline {
+                Text(verbatim: headline)
+                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Theme.tertiary)
             }
         case .translate:
             // Nothing: the columns name both languages already, and the strip
@@ -185,14 +185,14 @@ struct NotchContentView: View {
     @ViewBuilder
     private var pane: some View {
         switch vm.tab {
-        case .media:
-            MediaPane(media: vm.media)
+        case .agents:
+            AgentsPane(agents: vm.agents, privacy: vm.privacy)
         case .shelf:
             ShelfPane(shelf: vm.shelf, isTargeted: panel.isDropTargeted)
         case .clipboard:
             ClipboardPane(clipboard: vm.clipboard, privacy: vm.privacy)
-        case .calendar:
-            CalendarPane(calendar: vm.calendar, privacy: vm.privacy)
+        case .limits:
+            LimitsPane(limits: vm.limits)
         case .snippets:
             SnippetsPane(snippets: vm.snippets, privacy: vm.privacy, wantsKeyboard: $panel.wantsKeyboard)
         case .translate:

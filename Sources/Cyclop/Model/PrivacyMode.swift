@@ -30,7 +30,7 @@ final class PrivacyMode: ObservableObject {
             switch self {
             case .clipboard: return localized("Clipboard")
             case .snippets: return localized("Snippets")
-            case .calendar: return localized("Calendar")
+            case .calendar: return localized("Agents")
             case .notes: return localized("Notes")
             }
         }

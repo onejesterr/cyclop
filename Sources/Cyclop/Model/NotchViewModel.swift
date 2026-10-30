@@ -4,16 +4,16 @@ import Combine
 @MainActor
 final class NotchViewModel: ObservableObject {
     enum Tab: String, CaseIterable, Identifiable {
-        case media, shelf, clipboard, snippets, calendar, translate, currency, notes, teleprompter, utilities, settings
+        case agents, shelf, clipboard, snippets, limits, translate, currency, notes, teleprompter, utilities, settings
         var id: String { rawValue }
 
         var symbol: String {
             switch self {
-            case .media: return "music.note"
+            case .agents: return "sparkles"
             case .shelf: return "tray.full.fill"
             case .clipboard: return "list.clipboard.fill"
             case .snippets: return "pin.fill"
-            case .calendar: return "calendar"
+            case .limits: return "gauge.with.dots.needle.67percent"
             case .translate: return "translate"
             case .currency: return "dollarsign.circle"
             case .notes: return "note.text"
@@ -25,11 +25,11 @@ final class NotchViewModel: ObservableObject {
 
         var title: String {
             switch self {
-            case .media: return localized("Music")
+            case .agents: return localized("Agents")
             case .shelf: return localized("Shelf")
             case .clipboard: return localized("Clipboard")
             case .snippets: return localized("Snippets")
-            case .calendar: return localized("Calendar")
+            case .limits: return localized("Limits")
             case .translate: return localized("Translate")
             case .currency: return localized("Currency")
             case .notes: return localized("Notes")
@@ -72,7 +72,7 @@ final class NotchViewModel: ObservableObject {
         /// rail: it is not something to hover past on the way to a track or a
         /// calendar, so it sits last, furthest from the tabs people actually
         /// rest on.
-        static let leftRail: [Tab] = [.media, .shelf, .clipboard, .snippets, .calendar, .translate]
+        static let leftRail: [Tab] = [.agents, .shelf, .clipboard, .snippets, .limits, .translate]
         static let rightRail: [Tab] = [.notes, .currency, .teleprompter, .utilities, .settings]
     }
 
@@ -135,16 +135,14 @@ final class NotchViewModel: ObservableObject {
     /// icon has left the rail.
     private func startBackground(of target: Tab) {
         switch target {
-        case .media:
-            media.start()
-            if isPanelActive { media.setActive(true) }
+        case .agents:
+            agents.start()
+            if isPanelActive { agents.setActive(true) }
         case .clipboard:
             clipboard.start()
-        case .calendar:
-            // Only picks up where it left off if access was granted earlier;
-            // it never prompts on its own.
-            calendar.start()
-            if isPanelActive { calendar.setActive(true) }
+        case .limits:
+            limits.start()
+            if isPanelActive { limits.setActive(true) }
         case .shelf:
             // Off until the user grants a folder through `requestAccess`;
             // this only re-arms a watch already approved on a previous launch.
@@ -158,9 +156,9 @@ final class NotchViewModel: ObservableObject {
 
     private func stopBackground(of target: Tab) {
         switch target {
-        case .media: media.stop()
+        case .agents: agents.stop()
         case .clipboard: clipboard.stop()
-        case .calendar: calendar.stop()
+        case .limits: limits.stop()
         case .shelf: screenshotFolder.stop()
         case .currency: currencies.stop()
         // Taking the tab off the rail with the screen still covered would
@@ -176,8 +174,8 @@ final class NotchViewModel: ObservableObject {
     func setPanelActive(_ active: Bool) {
         guard active != isPanelActive else { return }
         isPanelActive = active
-        if isVisible(.media) { media.setActive(active) }
-        if isVisible(.calendar) { calendar.setActive(active) }
+        if isVisible(.agents) { agents.setActive(active) }
+        if isVisible(.limits) { limits.setActive(active) }
     }
 
     private var started = false
@@ -193,13 +191,14 @@ final class NotchViewModel: ObservableObject {
         tab.needsKeyboard || (tab == .teleprompter && teleprompter.script.isEmpty)
     }
 
-    @Published var tab: Tab = .media {
+    @Published var tab: Tab = .agents {
         didSet {
             // Opening the tab only re-checks the status. The permission prompt
             // is the user's own press on the button inside the pane: this is
             // the one permission Cyclop asks for at all, and it deserves an
             // explanation before the system dialog, not after.
-            if tab == .calendar { calendar.refreshAccess() }
+            if tab == .limits { limits.refresh(force: false) }
+            if tab == .agents { agents.refresh() }
             // The snippets file is edited from outside the app, so it is read
             // on the way in rather than held from launch.
             if tab == .snippets { snippets.reload() }
@@ -235,11 +234,11 @@ final class NotchViewModel: ObservableObject {
     /// script runs out, Escape, or a click anywhere outside the panel.
     var holdsOpen: Bool { tab == .teleprompter && teleprompter.isRunning }
 
-    let media: MediaController
+    let agents: AgentStore
     let shelf: ShelfStore
     let clipboard: ClipboardStore
     let screenshotFolder: ScreenshotFolderWatcher
-    let calendar: CalendarStore
+    let limits: LimitsStore
     let translator: Translator
     let currencies: CurrencyStore
     let snippets: SnippetStore
@@ -255,11 +254,11 @@ final class NotchViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     init() {
-        self.media = MediaController()
+        self.agents = AgentStore()
         self.shelf = ShelfStore()
         self.clipboard = ClipboardStore()
         self.screenshotFolder = ScreenshotFolderWatcher()
-        self.calendar = CalendarStore()
+        self.limits = LimitsStore()
         self.translator = Translator()
         self.currencies = CurrencyStore()
         self.snippets = SnippetStore()
@@ -287,10 +286,10 @@ final class NotchViewModel: ObservableObject {
         // header counter refreshes anyway, because the list is only ever
         // re-read on the way into the tab.
         for child in [
-            media.objectWillChange,
+            agents.objectWillChange,
             shelf.objectWillChange,
             clipboard.objectWillChange,
-            calendar.objectWillChange,
+            limits.objectWillChange,
         ] {
             child
                 .sink { [weak self] _ in
